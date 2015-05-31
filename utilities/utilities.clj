@@ -609,7 +609,7 @@ Common Lisp behavior that convert a hash table into a list of (key . val) pairs.
 
                (and (not (aima-system-examples system))
                     (every? symbol? (aima-system-parts system)))
-               (sum (aima-system-parts system) #(test % print?)),
+               (sum (aima-system-parts system) #(test-aima % print?)),
 
                :else
                (let [_ (when print? (println "Testing System" name)),
