@@ -14,9 +14,11 @@
   which are the Clojure generalization of the Clojure list type."
   {:author "Initially translated from Common Lisp AIMA code of Peter Norvig by
 Robert L. Kirby http://www.linkedin.com/in/bobkirby"}
+  (:require [clojure.math.numeric-tower :as math])
   (:use aima
         [clojure.pprint :only (pprint get-pretty-writer *print-pretty*)])
-  (:import (java.io Writer) (java.util ArrayList Collection)))
+  (:import (java.io Writer)
+           (java.util ArrayList Collection)))
 
 ;;; The AIMA Common Lisp macros "while", "for", "dotimes", and "deletef"
 ;;; are not translated.  "define-if-undefined" should not be used as is.
@@ -49,7 +51,7 @@ Robert L. Kirby http://www.linkedin.com/in/bobkirby"}
 (def sink-writer
   "Common Lisp BROADCAST-STREAM with no outputs equivalent"
   (proxy [Writer]
-      []                                ; no super constructor arguments
+         []                                                 ; no super constructor arguments
     ;; override abstract methods with empty implementations
     (write [^chars cbuf, off, len])
     (close [])
@@ -126,8 +128,8 @@ Example: (transpose '((a b c) (d e f))) => ([a d] [b e] [c f])."
   "Return (cons x y), or reuse x-y if it is equal to (cons x y)"
   [x y x-y]
   (if (and (= x (first x-y)) (= y (next x-y)))
-      x-y
-      (cons x y)))
+    x-y
+    (cons x y)))
 
 ;;; An expression is a seq consisting of a prefix operator followed by args,
 ;;; Or it can be a symbol, denoting an operator with no arguments.
@@ -154,8 +156,8 @@ Example: (transpose '((a b c) (d e f))) => ([a d] [b e] [c f])."
   [exp]
   (cond (nil? exp) nil,
         (not (seq? exp)) exp,
-	(nil? (next exp)) exp,
-	:else (insert-between (op exp) (map prefix->infix (args exp)))))
+        (nil? (next exp)) exp,
+        :else (insert-between (op exp) (map prefix->infix (args exp)))))
 
 ;;;; Numeric Utilities
 ;; These utilities must come first in order to avoid forward declarations.
@@ -173,9 +175,9 @@ Example: (transpose '((a b c) (d e f))) => ([a d] [b e] [c f])."
 (defn sum
   "Add up all the numbers; if function k is given, apply it to each number first."
   ([numbers]
-     (apply + numbers))
+   (apply + numbers))
   ([numbers k]
-     (sum (map k numbers))))
+   (sum (map k numbers))))
 
 (defn average
   "Numerical average (mean) of a list of numbers."
@@ -184,7 +186,7 @@ Example: (transpose '((a b c) (d e f))) => ([a d] [b e] [c f])."
 
 (defn running-average
   "Calculate new average given previous average over n data points"
-  [avg new-val n] ;; Clojure uses "new" as a special form unlike Common Lisp.
+  [avg new-val n]                                           ;; Clojure uses "new" as a special form unlike Common Lisp.
   (/ (+ new-val (* avg n)) (inc n)))
 
 (defn square [x] (* x x))
@@ -219,8 +221,8 @@ Example: (transpose '((a b c) (d e f))) => ([a d] [b e] [c f])."
   "Return a list of n consecutive integers, by default starting at 0."
   ([n] (iota n 0))
   ([n start-at]
-     (if (not (pos? n))
-       nil (range start-at n 1))))
+   (if (not (pos? n))
+     nil (range start-at n 1))))
 
 (defn random-integer
   "Return an integer chosen at random from the given interval."
@@ -228,7 +230,7 @@ Example: (transpose '((a b c) (d e f))) => ([a d] [b e] [c f])."
   (+ from (rand-int (inc (- to from)))))
 
 (defn normal [x mu sigma]
-  (/ (Math/exp (double (/ (- (square (- x mu))) (* 2 (square sigma))))) 
+  (/ (Math/exp (double (/ (- (square (- x mu))) (* 2 (square sigma)))))
      (* (Math/sqrt (* 2 Math/PI)) sigma)))
 
 (defn sample-with-replacement [n population]
@@ -239,30 +241,40 @@ Example: (transpose '((a b c) (d e f))) => ([a d] [b e] [c f])."
   ([n population] (sample-without-replacement n population (count population)))
   ;; Assumes that m = (count population)
   ([n population m]
-     (cond
-      (<= n 0) nil,
-      ;; Apparently, if the entire population is sampled,
-      ;; randomness does not matter.
-      (>= n m) population,
-      ;; Common Lisp algorithm changed to use java.util.ArrayList
-      ;; to have linear rather than quadratic behavior.
-      :else (let [array-list (ArrayList. ^Collection (seq population))]
-              (map #(.remove array-list (rand-int %)) (range m (- m n) -1))))))
+   (cond
+     (<= n 0) nil,
+     ;; Apparently, if the entire population is sampled,
+     ;; randomness does not matter.
+     (>= n m) population,
+     ;; Common Lisp algorithm changed to use java.util.ArrayList
+     ;; to have linear rather than quadratic behavior.
+     :else (let [array-list (ArrayList. ^Collection (seq population))]
+             (map #(.remove array-list (rand-int %)) (range m (- m n) -1))))))
 
-(defn round-off
-  "Round off the number to specified precision. E.g. (round-off 1.23 .1) = 1.2"
-  [number precision]
-  (* precision (Math/round (double (* number (/ precision))))))
+(defn round-places [number decimals]
+  (let [factor (math/expt 10 decimals)]
+    (bigdec (/ (math/round (* factor number)) factor))))
+
+; Usually precision is given as an integer number of decimal places
+; Norvig uses .1, .01, etc. so we convert his inputs
+(defn precision [fraction]
+  "Convert Norvig's precision to integer number of decimal places"
+  (int (Math/abs (Math/log10 (/ fraction)))))
+
+(defn round-off [number p]
+; Clojure does not seem to allow doubles and floats with no zero leading decimals
+  "Round off the number to specified precision. E.g. (round-off 1.23 0.1) = 1.2"
+    (round-places number (precision p)))
 
 (defn fuzz
   "Add and also subtract a random fuzz-factor to a quantity."
   ([quantity] (fuzz quantity 0.1 0.01))
   ([quantity proportion] (fuzz quantity proportion 0.01))
   ([quantity proportion rounding]
-     (round-off (+ quantity
-                   (* quantity (- (rand (double proportion))
-                                  (rand (double proportion)))))
-                rounding)))
+   (round-off (+ quantity
+                 (* quantity (- (rand (double proportion))
+                                (rand (double proportion)))))
+              rounding)))
 
 ;;;; Functions for manipulating 2-dimensional points 
 ;; Unlike expensive Common Lisp vectors, Clojure vectors are a preferred type.
@@ -349,7 +361,7 @@ Any msg and args should be accepted by Clojure format,
 which may have different requirements than a Common Lisp error designator."
   ([] (required "A required argument is missing."))
   ([msg & args]
-     (throw (RuntimeException. ^String (apply format msg args)))))
+   (throw (RuntimeException. ^String (apply format msg args)))))
 
 ;;;; Utilities for strings and symbols and printing
 
@@ -364,41 +376,41 @@ which may have different requirements than a Common Lisp error designator."
 
 (defn print-repeated
   "Print the string n times."
-  ([string n] ;; Avoids rebinding *out*
-     (dotimes [_ n] (print string)))
+  ([string n]                                               ;; Avoids rebinding *out*
+   (dotimes [_ n] (print string)))
   ([string n stream]
-     (binding [*out* stream]
-       (print-repeated string n))))
+   (binding [*out* stream]
+     (print-repeated string n))))
 
 (defn print-centered
   "Print STRING centered in a field WIDTH wide."
-  ([string width] ;; Avoids rebinding *out*
-     (let [s (stringify string),
-           blanks (- width (count s))]
-       (print-repeated " " (quot blanks 2))
-       (print s)
-       (print-repeated " " (quot (inc blanks) 2))))
+  ([string width]                                           ;; Avoids rebinding *out*
+   (let [s (stringify string),
+         blanks (- width (count s))]
+     (print-repeated " " (quot blanks 2))
+     (print s)
+     (print-repeated " " (quot (inc blanks) 2))))
   ([string width stream]
-     (binding [*out* stream]
-       (print-centered string width))))
+   (binding [*out* stream]
+     (print-centered string width))))
 
 (defn print-dashes
   "Print a line of dashes WIDTH wide."
-  ([width] ;; Avoids rebinding *out*
-     (print-repeated "-" width))
+  ([width]                                                  ;; Avoids rebinding *out*
+   (print-repeated "-" width))
   ([width stream]
-     (binding [*out* stream]
-       (print-dashes width)))
+   (binding [*out* stream]
+     (print-dashes width)))
   ([width stream separate-line]
-     (binding [*out* stream]
-       (when separate-line (newline))
-       (print-repeated "-" width)
-       (when separate-line (newline)))))
+   (binding [*out* stream]
+     (when separate-line (newline))
+     (print-repeated "-" width)
+     (when separate-line (newline)))))
 
 (defn print-grid
   "Print the contents of a 2-D array, numbering the edges."
   [array {stream :stream, key :key, width :width,
-          :or {stream *out*, key identity, width 3 }}]
+          :or    {stream *out*, key identity, width 3}}]
   ;; Rebinds *out* as little as possible for idiomatic Clojure printing.
   (binding [*out* stream]
     ;; Unlike with Common Lisp AIMA code, the upper bound excludes the last value
@@ -470,10 +482,10 @@ Common Lisp behavior that convert a hash table into a list of (key . val) pairs.
 (defn hprint
   "prints a hash table, which actually may be any map, line by line"
   ([h]
-     (doseq [[x y] h]
-       (newline) (print x) (print " ") (print y))
-     (flush)
-     h)
+   (doseq [[x y] h]
+     (newline) (print x) (print " ") (print y))
+   (flush)
+   h)
   ([h stream] (binding [*out* stream])))
 
 (defmacro compose
@@ -492,13 +504,13 @@ Common Lisp behavior that convert a hash table into a list of (key . val) pairs.
   [f s]
   (when-not (empty? s)
     (rand-nth
-     (with-local-vars [best-val (f (first s))]
-       (reduce #(let [val (f %2)]
+      (with-local-vars [best-val (f (first s))]
+        (reduce #(let [val (f %2)]
                   (cond (== val (var-get best-val)) (conj %1 %2),
                         (> val (var-get best-val)) (do (var-set best-val val)
                                                        [%2]),
                         :else %1))
-               [(first s)] (next s))))))
+                [(first s)] (next s))))))
 
 (defn the-biggest-that
   "Return first item from seq s satisfying predicate p whose f value is biggest."
@@ -516,14 +528,14 @@ Common Lisp behavior that convert a hash table into a list of (key . val) pairs.
   [f s]
   (when-not (empty? s)
     (rand-nth
-     (with-local-vars [best-val (f (first s))]
-       (reduce #(let [val (f %2)]
+      (with-local-vars [best-val (f (first s))]
+        (reduce #(let [val (f %2)]
                   (cond (== val (var-get best-val)) (conj %1 %2),
                         (< val (var-get best-val)) (do (var-set best-val val)
                                                        [%2]),
                         :else %1))
-               (vector (first s))
-               (next s))))))
+                (vector (first s))
+                (next s))))))
 
 (defn the-smallest-that
   "Return first item from seq s satisfying predicate p whose f value is least"
@@ -573,24 +585,24 @@ Common Lisp behavior that convert a hash table into a list of (key . val) pairs.
   "Does the EXP part of this example pass the TEST?"
   ([example] (test-example true))
   ([example print?]
-     (if (string? example)
-       (do (when (= print? true) (println ";;;" example))
-           true)
-       (let [exp (first example),
-             test (cond (not (second example)) true,
-                        (not (seq? (second example))) `(equal * ~(second example)),
-                        :else (second example)),
-             _ (when (= print? true) (println exp))
-             * (eval exp)]
-         (when (= print? true)
-           (println *))
-         (if-let [test-result (eval test)]
-           test-result
-           (case print?
-             fail (println ";;; FAILURE on" (str exp \;)
-                           "expected" (str test ", got:\n;;;") *),
-             true (println ";;; FAILURE: expected" test),
-             nil))))))
+   (if (string? example)
+     (do (when (= print? true) (println ";;;" example))
+         true)
+     (let [exp (first example),
+           test (cond (not (second example)) true,
+                      (not (seq? (second example))) `(= * ~(second example)),
+                      :else (second example)),
+           _ (when (= print? true) (println exp))
+           * (eval exp)]
+       (when (= print? true)
+         (println *))
+       (if-let [test-result (eval test)]
+         test-result
+         (case print?
+           fail (println ";;; FAILURE on" (str exp \;)
+                         "expected" (str test ", got:\n;;;") *),
+           true (println ";;; FAILURE: expected" test),
+           nil))))))
 
 (defn test-aima
   "Run a test suite and sum the number of errors.  If all is well, this
@@ -601,23 +613,23 @@ Common Lisp behavior that convert a hash table into a list of (key . val) pairs.
   ([] (test-aima 'all true))
   ([name] (test-aima name true))
   ([name print?]
-     (let [system (aima-load-if-unloaded name)]
-       (binding [*print-pretty* true,
-                 *out* (if print? *out*
-                           sink-writer)]
-         (cond (not system) (println "No such system as" (str name \.)),
+   (let [system (aima-load-if-unloaded name)]
+     (binding [*print-pretty* true,
+               *out* (if print? *out*
+                                sink-writer)]
+       (cond (not system) (println "No such system as" (str name \.)),
 
-               (and (not (aima-system-examples system))
-                    (every? symbol? (aima-system-parts system)))
-               (sum (aima-system-parts system) #(test % print?)),
+             (and (not (aima-system-examples system))
+                  (every? symbol? (aima-system-parts system)))
+             (sum (aima-system-parts system) #(test-aima % print?)),
 
-               :else
-               (let [_ (when print? (println "Testing System" name)),
-                     errors (count (remove #(test-example % print?)
-                                           (aima-system-examples system)))]
-                 (when print?
-                   ;; *err* is closest equivalent to Common Lisp *DEBUG-IO*
-                   (binding [*out* *err*]
-                     (println errors (str "error" (if (not= errors 1) "s"))
-                              "on system" name)))
-                 errors))))))
+             :else
+             (let [_ (when print? (println "Testing System" name)),
+                   errors (count (remove #(test-example % print?)
+                                         (aima-system-examples system)))]
+               (when print?
+                 ;; *err* is closest equivalent to Common Lisp *DEBUG-IO*
+                 (binding [*out* *err*]
+                   (println errors (str "error" (if (not= errors 1) "s"))
+                            "on system" name)))
+               errors))))))
